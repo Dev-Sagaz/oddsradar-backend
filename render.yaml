@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: oddsradar-backend
+    runtime: java
+    buildCommand: "./mvnw clean package -DskipTests"
+    startCommand: "java -jar target/oddsradar-*.jar"
+    envVars:
+      - key: ODDS_API_KEY
+        value: e8a8f957335ed15d1a7726f213fde635
