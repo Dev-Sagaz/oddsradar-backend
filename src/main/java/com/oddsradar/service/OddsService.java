@@ -31,7 +31,7 @@ public class OddsService {
                         double price = outcome.getPrice();
 
                         if (!best.containsKey(key) ||
-                                price > best.get(key)[0]) {
+                            price > best.get(key)[0]) {
                             best.put(key, new double[]{price});
                             bestBook.put(key, bm.getTitle());
                         }
@@ -41,16 +41,28 @@ public class OddsService {
 
             List<BestOddsResult.BestOutcome> outcomes = new ArrayList<>();
             best.forEach((name, price) ->
-                    outcomes.add(new BestOddsResult.BestOutcome(
-                            name, price[0], bestBook.get(name)))
+                outcomes.add(new BestOddsResult.BestOutcome(
+                    name, price[0], bestBook.get(name)))
             );
 
+            // Cálculo de arbitragem
+            double sumImplied = outcomes.stream()
+                .mapToDouble(o -> 1.0 / o.getBestPrice())
+                .sum();
+
+            boolean isArbitrage = sumImplied < 1.0;
+            double profitPercent = isArbitrage
+                ? Math.round((1.0 - sumImplied) * 10000.0) / 100.0
+                : 0.0;
+
             results.add(new BestOddsResult(
-                    game.getId(),
-                    game.getHome_team(),
-                    game.getAway_team(),
-                    game.getCommence_time(),
-                    outcomes
+                game.getId(),
+                game.getHome_team(),
+                game.getAway_team(),
+                game.getCommence_time(),
+                outcomes,
+                isArbitrage,
+                profitPercent
             ));
         }
         return results;
