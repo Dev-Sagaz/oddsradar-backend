@@ -13,6 +13,8 @@ public class BestOddsResult {
     private String awayTeam;
     private String commenceTime;
     private List<BestOutcome> bestOutcomes;
+    private boolean arbitrage;
+    private double profitPercent;
 
     @Data
     @AllArgsConstructor
