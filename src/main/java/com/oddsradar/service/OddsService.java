@@ -12,34 +12,22 @@ import java.util.*;
 @RequiredArgsConstructor
 public class OddsService {
 
-    private static final Set<String> BOOKMAKERS_BR = Set.of(
-        "Bet365",
-        "Betfair",
-        "Betfair_ex_eu",
-        "1xBet",
-        "Betano",
-        "Novibet",
-        "Superbet",
-        "KTO",
-        "Sportingbet",
-        "BetMGM",
-        "Betnacional",
-        "Aposta Ganha",
-        "Esportes da Sorte",
-        "King Panda",
-        "Pinnacle",
-        "Blaze",
-        "Betboom",
-        "Vbet",
-        "Brazino777",
-        "BetBra"
-    );
-
+ private static final Set<String> BOOKMAKERS_BR = Set.of(
+    "Betano",
+    "Novibet",
+    "Sportingbet",
+    "Esportes da Sorte",
+    "Esportiva Bet",
+    "Bet365",
+    "Pinnacle",
+    "KTO",
+    "Estrela Bet",
+    "BetBra"
+);
     // Exchanges conhecidas e suas comissões padrão (%)
-  private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
-    "Betfair",        6.5,  // corrigido de 5.0 para 6.5 (taxa BR)
-    "Betfair_ex_eu",  6.5,
-    "Matchbook",      2.0
+private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
+    "Pinnacle", 0.0,  // Pinnacle não é exchange mas tem margem embutida
+    "BetBra",   0.0
 );
 
     // odd_efetiva = 1 + (odd - 1) * (1 - comissao/100)
