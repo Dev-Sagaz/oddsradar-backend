@@ -24,7 +24,7 @@ public class OddsApiClient {
     public List<OddsResponse> getOdds(String sport) {
         String url = BASE_URL + "/" + sport + "/odds"
                 + "?apiKey=" + apiKey
-                + "&regions=eu"
+                + "&regions=eu,uk,us,au"
                 + "&markets=h2h"
                 + "&oddsFormat=decimal";
 
