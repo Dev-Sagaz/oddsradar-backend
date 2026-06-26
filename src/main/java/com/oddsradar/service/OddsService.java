@@ -12,6 +12,29 @@ import java.util.*;
 @RequiredArgsConstructor
 public class OddsService {
 
+    private static final Set<String> BOOKMAKERS_BR = Set.of(
+        "Bet365",
+        "Betfair",
+        "Betfair_ex_eu",
+        "1xBet",
+        "Betano",
+        "Novibet",
+        "Superbet",
+        "KTO",
+        "Sportingbet",
+        "BetMGM",
+        "Betnacional",
+        "Aposta Ganha",
+        "Esportes da Sorte",
+        "King Panda",
+        "Pinnacle",
+        "Blaze",
+        "Betboom",
+        "Vbet",
+        "Brazino777",
+        "BetBra"
+    );
+
     private final OddsApiClient oddsApiClient;
 
     @Cacheable("best-odds")
@@ -24,6 +47,9 @@ public class OddsService {
             Map<String, String> bestBook = new HashMap<>();
 
             for (Bookmaker bm : game.getBookmakers()) {
+                // 🔒 Filtra apenas casas autorizadas no Brasil
+                if (!BOOKMAKERS_BR.contains(bm.getTitle())) continue;
+
                 for (Market market : bm.getMarkets()) {
                     if (!"h2h".equals(market.getKey())) continue;
                     for (Outcome outcome : market.getOutcomes()) {
@@ -51,10 +77,6 @@ public class OddsService {
 
             boolean isArbitrage = sumImplied < 1.0;
 
-            // NOTA: fórmula corrigida para bater com a calculadora de referência (Surebet).
-            // (1 - sumImplied) * 100 é uma aproximação que subestima o profit real
-            // quando sumImplied é bem menor que 1. A fórmula correta é (1/sumImplied - 1) * 100.
-            // Ex.: sumImplied = 0.80 -> aproximação dá 20.00%, fórmula correta dá 25.00%.
             double profitPercent = isArbitrage
                 ? Math.round(((1.0 / sumImplied) - 1.0) * 10000.0) / 100.0
                 : 0.0;
@@ -73,19 +95,18 @@ public class OddsService {
         return results;
     }
 
-    /**
-     * Calcula a distribuição ideal de stakes para um conjunto de odds (uma por desfecho),
-     * dado um valor total a ser apostado. Replica a lógica de "distribuir" da calculadora
-     * de surebets de referência: o stake em cada desfecho é proporcional ao inverso da odd,
-     * de forma que o lucro seja igual (ou o mais próximo possível, após arredondamento)
-     * independentemente de qual desfecho ocorra.
-     *
-     * @param odds         lista de odds, uma por desfecho/casa (ex: [2.10, 2.05] para 1x2 de 2 vias)
-     * @param bookmakers   nomes das casas correspondentes (mesma ordem de odds)
-     * @param outcomeNames nomes dos desfechos correspondentes (mesma ordem de odds)
-     * @param totalStake   valor total que o usuário quer apostar
-     * @return ArbitrageCalculation com profitPercent e o stake/payout/profit de cada desfecho
-     */
+    // Endpoint de debug — lista todos os títulos de bookmakers que a API está retornando
+    public List<String> getAvailableBookmakers(String sport) {
+        List<OddsResponse> games = oddsApiClient.getOdds(sport);
+        Set<String> titles = new TreeSet<>();
+        for (OddsResponse game : games) {
+            for (Bookmaker bm : game.getBookmakers()) {
+                titles.add(bm.getTitle());
+            }
+        }
+        return new ArrayList<>(titles);
+    }
+
     public ArbitrageCalculation calculateArbitrage(
             List<Double> odds,
             List<String> bookmakers,
@@ -105,18 +126,14 @@ public class OddsService {
             throw new IllegalArgumentException("totalStake deve ser maior que zero");
         }
 
-        // 1. Soma das probabilidades implícitas: Σ(1/odd_i)
         double sumImplied = odds.stream()
                 .mapToDouble(odd -> 1.0 / odd)
                 .sum();
 
         boolean isArbitrage = sumImplied < 1.0;
 
-        // 2. Profit % real = (1/sumImplied - 1) * 100
         double profitPercent = ((1.0 / sumImplied) - 1.0) * 100.0;
 
-        // 3. Stake ideal por desfecho: stake_i = (totalStake / odd_i) / sumImplied
-        //    Isso garante que stake_i * odd_i seja igual para todo i (mesmo payout em qualquer desfecho).
         List<ArbitrageCalculation.OutcomeStake> outcomeStakes = new ArrayList<>();
 
         for (int i = 0; i < odds.size(); i++) {
