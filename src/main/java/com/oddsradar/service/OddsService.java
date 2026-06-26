@@ -36,11 +36,11 @@ public class OddsService {
     );
 
     // Exchanges conhecidas e suas comissões padrão (%)
-    private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
-        "Betfair",        5.0,
-        "Betfair_ex_eu",  5.0,
-        "Matchbook",      2.0
-    );
+  private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
+    "Betfair",        6.5,  // corrigido de 5.0 para 6.5 (taxa BR)
+    "Betfair_ex_eu",  6.5,
+    "Matchbook",      2.0
+);
 
     // odd_efetiva = 1 + (odd - 1) * (1 - comissao/100)
     private double applyExchangeCommission(double odd, double commissionPct) {
