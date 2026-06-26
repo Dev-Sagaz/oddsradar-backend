@@ -12,28 +12,29 @@ import java.util.*;
 @RequiredArgsConstructor
 public class OddsService {
 
-    private static final Set<String> BOOKMAKERS_BR = Set.of(
-        "Bet365",
-        "Betfair",
-        "Betfair_ex_eu",
-        "1xBet",
-        "Betano",
-        "Novibet",
-        "Superbet",
-        "KTO",
-        "Sportingbet",
-        "BetMGM",
-        "Betnacional",
-        "Aposta Ganha",
-        "Esportes da Sorte",
-        "King Panda",
-        "Pinnacle",
-        "Blaze",
-        "Betboom",
-        "Vbet",
-        "Brazino777",
-        "BetBra"
-    );
+private static final Set<String> BOOKMAKERS_BR = Set.of(
+    "Bet365",
+    "Betfair",
+    "Betfair_ex_eu",
+    "1xBet",
+    "Betano",
+    "Novibet",
+    "Superbet",
+    "KTO",
+    "Sportingbet",
+    "BetMGM",
+    "Betnacional",
+    "Aposta Ganha",
+    "Esportes da Sorte",
+    "King Panda",
+    "Pinnacle",
+    "Blaze",
+    "Betboom",
+    "Vbet",
+    "Brazino777",
+    "BetBra",
+    "Matchbook"
+);
 
     private final OddsApiClient oddsApiClient;
 
