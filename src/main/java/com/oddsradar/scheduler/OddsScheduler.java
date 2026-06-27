@@ -14,11 +14,16 @@ public class OddsScheduler {
 
     private final OddsService oddsService;
 
-    @Scheduled(fixedRate = 60_000)
+    // Atualiza a cada 10 minutos — preserva cota da The Odds API
+    @Scheduled(fixedRate = 600_000)
     @CacheEvict(value = "best-odds", allEntries = true)
     public void refreshOdds() {
         log.info("[OddsScheduler] Atualizando odds...");
-        oddsService.getBestOdds("soccer_fifa_world_cup");
-        log.info("[OddsScheduler] Odds atualizadas.");
+        try {
+            oddsService.getBestOdds("soccer_fifa_world_cup");
+            log.info("[OddsScheduler] Odds atualizadas com sucesso.");
+        } catch (Exception e) {
+            log.error("[OddsScheduler] Erro ao atualizar odds: {}", e.getMessage());
+        }
     }
 }
