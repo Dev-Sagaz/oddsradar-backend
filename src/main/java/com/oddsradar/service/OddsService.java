@@ -1,6 +1,7 @@
 package com.oddsradar.service;
 
 import com.oddsradar.client.OddsApiClient;
+import com.oddsradar.client.OddsPapiClient;
 import com.oddsradar.model.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
@@ -12,35 +13,63 @@ import java.util.*;
 @RequiredArgsConstructor
 public class OddsService {
 
- private static final Set<String> BOOKMAKERS_BR = Set.of(
-    "Betano",
-    "Novibet",
-    "Sportingbet",
-    "Esportes da Sorte",
-    "Esportiva Bet",
-    "Bet365",
-    "Pinnacle",
-    "KTO",
-    "Estrela Bet",
-    "BetBra"
-);
-    // Exchanges conhecidas e suas comissões padrão (%)
-private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
-    "Pinnacle", 0.0,  // Pinnacle não é exchange mas tem margem embutida
-    "BetBra",   0.0
-);
+    private final OddsApiClient oddsApiClient;
+    private final OddsPapiClient oddsPapiClient;
 
-    // odd_efetiva = 1 + (odd - 1) * (1 - comissao/100)
+    private static final Set<String> BOOKMAKERS_BR = Set.of(
+        "Betano",
+        "Novibet",
+        "Sportingbet",
+        "Esportes da Sorte",
+        "Esportiva Bet",
+        "Bet365",
+        "Pinnacle",
+        "KTO",
+        "Estrela Bet",
+        "BetBra",
+        "Superbet"
+    );
+
+    private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
+        "Betfair",       6.5,
+        "Betfair_ex_eu", 6.5,
+        "Matchbook",     2.0
+    );
+
     private double applyExchangeCommission(double odd, double commissionPct) {
         return 1.0 + (odd - 1.0) * (1.0 - commissionPct / 100.0);
     }
 
     @Cacheable("best-odds")
     public List<BestOddsResult> getBestOdds(String sport) {
-        List<OddsResponse> games = oddsApiClient.getOdds(sport);
+
+        // 1. Busca das duas APIs e combina os jogos
+        List<OddsResponse> gamesFromOddsApi = new ArrayList<>();
+        List<OddsResponse> gamesFromOddsPapi = new ArrayList<>();
+
+        try { gamesFromOddsApi  = oddsApiClient.getOdds(sport);  } catch (Exception ignored) {}
+        try { gamesFromOddsPapi = oddsPapiClient.getOdds(sport); } catch (Exception ignored) {}
+
+        // 2. Indexa jogos da OddsAPI por homeTeam+awayTeam
+        Map<String, OddsResponse> gameMap = new LinkedHashMap<>();
+        for (OddsResponse g : gamesFromOddsApi) {
+            gameMap.put(gameKey(g), g);
+        }
+
+        // 3. Mescla jogos do OddsPapi — se já existe, adiciona bookmakers; senão cria novo
+        for (OddsResponse g : gamesFromOddsPapi) {
+            String key = gameKey(g);
+            if (gameMap.containsKey(key)) {
+                // Adiciona bookmakers do OddsPapi ao jogo existente
+                gameMap.get(key).getBookmakers().addAll(g.getBookmakers());
+            } else {
+                gameMap.put(key, g);
+            }
+        }
+
         List<BestOddsResult> results = new ArrayList<>();
 
-        for (OddsResponse game : games) {
+        for (OddsResponse game : gameMap.values()) {
             // [effectivePrice, rawPrice, commission]
             Map<String, double[]> best = new HashMap<>();
             Map<String, String> bestBook = new HashMap<>();
@@ -69,6 +98,8 @@ private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
                 }
             }
 
+            if (best.isEmpty()) continue;
+
             List<BestOddsResult.BestOutcome> outcomes = new ArrayList<>();
             best.forEach((name, prices) -> {
                 String bmTitle = bestBook.get(name);
@@ -83,7 +114,6 @@ private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
                 ));
             });
 
-            // Cálculo de arbitragem usando effectivePrice
             double sumImplied = outcomes.stream()
                 .mapToDouble(o -> 1.0 / o.getBestPrice())
                 .sum();
@@ -107,14 +137,23 @@ private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
         return results;
     }
 
+    // Chave única por jogo para mesclar as duas APIs
+    private String gameKey(OddsResponse g) {
+        return (g.getHome_team() + "|" + g.getAway_team()).toLowerCase();
+    }
+
     public List<String> getAvailableBookmakers(String sport) {
-        List<OddsResponse> games = oddsApiClient.getOdds(sport);
         Set<String> titles = new TreeSet<>();
-        for (OddsResponse game : games) {
-            for (Bookmaker bm : game.getBookmakers()) {
-                titles.add(bm.getTitle());
-            }
-        }
+        try {
+            for (OddsResponse g : oddsApiClient.getOdds(sport))
+                for (Bookmaker bm : g.getBookmakers())
+                    titles.add(bm.getTitle());
+        } catch (Exception ignored) {}
+        try {
+            for (OddsResponse g : oddsPapiClient.getOdds(sport))
+                for (Bookmaker bm : g.getBookmakers())
+                    titles.add(bm.getTitle());
+        } catch (Exception ignored) {}
         return new ArrayList<>(titles);
     }
 
@@ -164,8 +203,6 @@ private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
             outcomeStakes
         );
     }
-
-    private final OddsApiClient oddsApiClient;
 
     private double round2(double value) {
         return Math.round(value * 100.0) / 100.0;
