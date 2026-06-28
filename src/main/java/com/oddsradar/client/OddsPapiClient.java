@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDate;
 import java.util.*;
 
 @Component
@@ -22,7 +23,6 @@ public class OddsPapiClient {
 
     private static final String BASE_URL = "https://api.oddspapi.io/v4";
 
-    // Slugs das casas BR no OddsPapi
     private static final List<String> BOOKMAKERS_BR_SLUGS = List.of(
         "betano.bet.br",
         "superbet.bet.br",
@@ -36,60 +36,65 @@ public class OddsPapiClient {
     private static final String BOOKMAKERS_PARAM =
         String.join(",", BOOKMAKERS_BR_SLUGS);
 
-    // sportId no OddsPapi: 10 = Soccer, 2 = Basketball, 5 = Tennis
-    private static final Map<String, Integer> SPORT_ID_MAP = Map.of(
-        "soccer_fifa_world_cup",       10,
-        "soccer_brazil_campeonato",    10,
-        "soccer_brazil_serie_b",       10,
-        "soccer_epl",                  10,
-        "basketball_nba",              2
+    // Mapa de sport key → tournamentSlug do OddsPapi
+    private static final Map<String, String> SPORT_TOURNAMENT_MAP = Map.of(
+        "soccer_fifa_world_cup",    "world-cup",
+        "soccer_brazil_campeonato", "brasileiro-serie-a",
+        "soccer_brazil_serie_b",    "brasileiro-serie-b",
+        "soccer_epl",               "premier-league",
+        "basketball_nba",           "nba"
     );
-public List<OddsResponse> getOdds(String sport) {
-    int sportId = SPORT_ID_MAP.getOrDefault(sport, 10);
 
-    // Datas de hoje até 7 dias à frente
-    String from = java.time.LocalDate.now().toString();
-    String to   = java.time.LocalDate.now().plusDays(7).toString();
+    public List<OddsResponse> getOdds(String sport) {
+        String tournamentSlug = SPORT_TOURNAMENT_MAP.getOrDefault(sport, "world-cup");
 
-    // 1. Busca fixtures do esporte
-    String fixturesUrl = BASE_URL + "/fixtures"
-        + "?apiKey=" + apiKey
-        + "&sportId=" + sportId
-        + "&hasOdds=true"
-        + "&from=" + from
-        + "&to=" + to;
+        String from = LocalDate.now().toString();
+        String to   = LocalDate.now().plusDays(7).toString();
 
-    OddsPapiFixture[] fixtures;
-    try {
-        fixtures = restTemplate.getForObject(fixturesUrl, OddsPapiFixture[].class);
-    } catch (Exception e) {
-        return Collections.emptyList();
-    }
-    if (fixtures == null || fixtures.length == 0) return Collections.emptyList();
-
-    List<OddsResponse> results = new ArrayList<>();
-
-    // 2. Para cada fixture, busca odds das casas BR
-    for (OddsPapiFixture fixture : fixtures) {
-        String oddsUrl = BASE_URL + "/odds"
+        String fixturesUrl = BASE_URL + "/fixtures"
             + "?apiKey=" + apiKey
-            + "&fixtureId=" + fixture.getFixtureId()
-            + "&bookmakers=" + BOOKMAKERS_PARAM;
+            + "&sportId=10"
+            + "&hasOdds=true"
+            + "&from=" + from
+            + "&to=" + to;
 
-        OddsPapiOddsResponse oddsResp;
+        OddsPapiFixture[] allFixtures;
         try {
-            oddsResp = restTemplate.getForObject(oddsUrl, OddsPapiOddsResponse.class);
+            allFixtures = restTemplate.getForObject(fixturesUrl, OddsPapiFixture[].class);
         } catch (Exception e) {
-            continue;
+            return Collections.emptyList();
         }
-        if (oddsResp == null || oddsResp.getBookmakerOdds() == null) continue;
+        if (allFixtures == null || allFixtures.length == 0) return Collections.emptyList();
 
-        OddsResponse game = convertToOddsResponse(fixture, oddsResp);
-        if (game != null) results.add(game);
+        // Filtra pelo torneio correto
+        List<OddsPapiFixture> fixtures = Arrays.stream(allFixtures)
+            .filter(f -> tournamentSlug.equals(f.getTournamentSlug()))
+            .toList();
+
+        if (fixtures.isEmpty()) return Collections.emptyList();
+
+        List<OddsResponse> results = new ArrayList<>();
+
+        for (OddsPapiFixture fixture : fixtures) {
+            String oddsUrl = BASE_URL + "/odds"
+                + "?apiKey=" + apiKey
+                + "&fixtureId=" + fixture.getFixtureId()
+                + "&bookmakers=" + BOOKMAKERS_PARAM;
+
+            OddsPapiOddsResponse oddsResp;
+            try {
+                oddsResp = restTemplate.getForObject(oddsUrl, OddsPapiOddsResponse.class);
+            } catch (Exception e) {
+                continue;
+            }
+            if (oddsResp == null || oddsResp.getBookmakerOdds() == null) continue;
+
+            OddsResponse game = convertToOddsResponse(fixture, oddsResp);
+            if (game != null) results.add(game);
+        }
+
+        return results;
     }
-
-    return results;
-}
 
     private OddsResponse convertToOddsResponse(
             OddsPapiFixture fixture,
@@ -105,13 +110,10 @@ public List<OddsResponse> getOdds(String sport) {
 
             if (bmOdds.getMarkets() == null) continue;
 
-            // Market 101 = 1X2 (Full Time Result)
             OddsPapiMarket market101 = bmOdds.getMarkets().get("101");
             if (market101 == null || market101.getOutcomes() == null) continue;
 
             List<Outcome> outcomes = new ArrayList<>();
-
-            // 101 = Home, 102 = Draw, 103 = Away
             extractOutcome(market101, "101", fixture.getParticipant1Name(), outcomes);
             extractOutcome(market101, "102", "Draw", outcomes);
             extractOutcome(market101, "103", fixture.getParticipant2Name(), outcomes);
@@ -135,7 +137,7 @@ public List<OddsResponse> getOdds(String sport) {
         game.setId(fixture.getFixtureId());
         game.setHome_team(fixture.getParticipant1Name());
         game.setAway_team(fixture.getParticipant2Name());
-        game.setCommence_time(fixture.getStartDate());
+        game.setCommence_time(fixture.getStartTime()); // corrigido: startTime
         game.setBookmakers(bookmakers);
 
         return game;
@@ -161,7 +163,6 @@ public List<OddsResponse> getOdds(String sport) {
         } catch (Exception ignored) {}
     }
 
-    // Converte slug para nome legível
     private String slugToTitle(String slug) {
         return switch (slug) {
             case "betano.bet.br"      -> "Betano";
@@ -175,14 +176,13 @@ public List<OddsResponse> getOdds(String sport) {
         };
     }
 
-    // ---- Classes internas de deserialização ----
-
     @lombok.Data
     public static class OddsPapiFixture {
         private String fixtureId;
         private String participant1Name;
         private String participant2Name;
-        private String startDate;
+        private String startTime;        // corrigido: era startDate
+        private String tournamentSlug;   // novo: para filtrar por torneio
     }
 
     @lombok.Data
