@@ -45,58 +45,80 @@ public class OddsPapiClient {
         "basketball_nba",           "nba"
     );
 
-    public List<OddsResponse> getOdds(String sport) {
-        String tournamentSlug = SPORT_TOURNAMENT_MAP.getOrDefault(sport, "world-cup");
+  public List<OddsResponse> getOdds(String sport) {
+    String tournamentSlug = SPORT_TOURNAMENT_MAP.getOrDefault(sport, "world-cup");
 
-        String from = LocalDate.now().toString();
-        String to   = LocalDate.now().plusDays(7).toString();
+    String from = LocalDate.now().toString();
+    String to   = LocalDate.now().plusDays(7).toString();
 
-        String fixturesUrl = BASE_URL + "/fixtures"
-            + "?apiKey=" + apiKey
-            + "&sportId=10"
-            + "&hasOdds=true"
-            + "&from=" + from
-            + "&to=" + to;
-
-        OddsPapiFixture[] allFixtures;
-        try {
-            allFixtures = restTemplate.getForObject(fixturesUrl, OddsPapiFixture[].class);
-        } catch (Exception e) {
-            return Collections.emptyList();
-        }
-        if (allFixtures == null || allFixtures.length == 0) return Collections.emptyList();
-
-        // Filtra pelo torneio correto
-        List<OddsPapiFixture> fixtures = Arrays.stream(allFixtures)
-            .filter(f -> tournamentSlug.equals(f.getTournamentSlug()))
-            .toList();
-
-        if (fixtures.isEmpty()) return Collections.emptyList();
-
-        List<OddsResponse> results = new ArrayList<>();
-
-        for (OddsPapiFixture fixture : fixtures) {
-    try { Thread.sleep(500); } catch (InterruptedException ignored) {} // 500ms entre requests
-
-    String oddsUrl = BASE_URL + "/odds"
+    String fixturesUrl = BASE_URL + "/fixtures"
         + "?apiKey=" + apiKey
-        + "&fixtureId=" + fixture.getFixtureId()
-        + "&bookmakers=" + BOOKMAKERS_PARAM;
+        + "&sportId=10"
+        + "&hasOdds=true"
+        + "&from=" + from
+        + "&to=" + to;
 
-    OddsPapiOddsResponse oddsResp;
+    System.out.println("[OddsPapi] Buscando fixtures: " + fixturesUrl);
+
+    OddsPapiFixture[] allFixtures;
     try {
-        oddsResp = restTemplate.getForObject(oddsUrl, OddsPapiOddsResponse.class);
+        allFixtures = restTemplate.getForObject(fixturesUrl, OddsPapiFixture[].class);
     } catch (Exception e) {
-        continue;
+        System.out.println("[OddsPapi] Erro fixtures: " + e.getMessage());
+        return Collections.emptyList();
     }
-    if (oddsResp == null || oddsResp.getBookmakerOdds() == null) continue;
 
-    OddsResponse game = convertToOddsResponse(fixture, oddsResp);
-    if (game != null) results.add(game);
+    System.out.println("[OddsPapi] Total fixtures: " + (allFixtures != null ? allFixtures.length : 0));
+
+    if (allFixtures == null || allFixtures.length == 0) return Collections.emptyList();
+
+    // Loga os slugs únicos recebidos
+    Arrays.stream(allFixtures)
+        .map(OddsPapiFixture::getTournamentSlug)
+        .distinct()
+        .forEach(s -> System.out.println("[OddsPapi] TournamentSlug encontrado: " + s));
+
+    List<OddsPapiFixture> fixtures = Arrays.stream(allFixtures)
+        .filter(f -> tournamentSlug.equals(f.getTournamentSlug()))
+        .toList();
+
+    System.out.println("[OddsPapi] Fixtures filtrados (" + tournamentSlug + "): " + fixtures.size());
+
+    if (fixtures.isEmpty()) return Collections.emptyList();
+
+    List<OddsResponse> results = new ArrayList<>();
+
+    for (OddsPapiFixture fixture : fixtures) {
+        try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+
+        String oddsUrl = BASE_URL + "/odds"
+            + "?apiKey=" + apiKey
+            + "&fixtureId=" + fixture.getFixtureId()
+            + "&bookmakers=" + BOOKMAKERS_PARAM;
+
+        System.out.println("[OddsPapi] Buscando odds: " + fixture.getParticipant1Name() + " vs " + fixture.getParticipant2Name());
+
+        OddsPapiOddsResponse oddsResp;
+        try {
+            oddsResp = restTemplate.getForObject(oddsUrl, OddsPapiOddsResponse.class);
+        } catch (Exception e) {
+            System.out.println("[OddsPapi] Erro odds: " + e.getMessage());
+            continue;
+        }
+        if (oddsResp == null || oddsResp.getBookmakerOdds() == null) {
+            System.out.println("[OddsPapi] OddsResp vazio para: " + fixture.getFixtureId());
+            continue;
+        }
+
+        System.out.println("[OddsPapi] Bookmakers retornados: " + oddsResp.getBookmakerOdds().keySet());
+
+        OddsResponse game = convertToOddsResponse(fixture, oddsResp);
+        if (game != null) results.add(game);
+    }
+
+    System.out.println("[OddsPapi] Total jogos convertidos: " + results.size());
+    return results;
 }
-
-        return results;
-    }
 
     private OddsResponse convertToOddsResponse(
             OddsPapiFixture fixture,
