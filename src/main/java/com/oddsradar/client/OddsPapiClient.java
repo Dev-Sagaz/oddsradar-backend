@@ -44,48 +44,52 @@ public class OddsPapiClient {
         "soccer_epl",                  10,
         "basketball_nba",              2
     );
+public List<OddsResponse> getOdds(String sport) {
+    int sportId = SPORT_ID_MAP.getOrDefault(sport, 10);
 
-    public List<OddsResponse> getOdds(String sport) {
-        int sportId = SPORT_ID_MAP.getOrDefault(sport, 10);
+    // Datas de hoje até 7 dias à frente
+    String from = java.time.LocalDate.now().toString();
+    String to   = java.time.LocalDate.now().plusDays(7).toString();
 
-        // 1. Busca fixtures do esporte
-        String fixturesUrl = BASE_URL + "/fixtures"
-            + "?apiKey=" + apiKey
-            + "&sportId=" + sportId
-            + "&hasOdds=true";
+    // 1. Busca fixtures do esporte
+    String fixturesUrl = BASE_URL + "/fixtures"
+        + "?apiKey=" + apiKey
+        + "&sportId=" + sportId
+        + "&hasOdds=true"
+        + "&from=" + from
+        + "&to=" + to;
 
-        OddsPapiFixture[] fixtures;
-        try {
-            fixtures = restTemplate.getForObject(fixturesUrl, OddsPapiFixture[].class);
-        } catch (Exception e) {
-            return Collections.emptyList();
-        }
-        if (fixtures == null || fixtures.length == 0) return Collections.emptyList();
-
-        List<OddsResponse> results = new ArrayList<>();
-
-        // 2. Para cada fixture, busca odds das casas BR
-        for (OddsPapiFixture fixture : fixtures) {
-            String oddsUrl = BASE_URL + "/odds"
-                + "?apiKey=" + apiKey
-                + "&fixtureId=" + fixture.getFixtureId()
-                + "&bookmakers=" + BOOKMAKERS_PARAM;
-
-            OddsPapiOddsResponse oddsResp;
-            try {
-                oddsResp = restTemplate.getForObject(oddsUrl, OddsPapiOddsResponse.class);
-            } catch (Exception e) {
-                continue;
-            }
-            if (oddsResp == null || oddsResp.getBookmakerOdds() == null) continue;
-
-            // 3. Converte para o modelo interno OddsResponse
-            OddsResponse game = convertToOddsResponse(fixture, oddsResp);
-            if (game != null) results.add(game);
-        }
-
-        return results;
+    OddsPapiFixture[] fixtures;
+    try {
+        fixtures = restTemplate.getForObject(fixturesUrl, OddsPapiFixture[].class);
+    } catch (Exception e) {
+        return Collections.emptyList();
     }
+    if (fixtures == null || fixtures.length == 0) return Collections.emptyList();
+
+    List<OddsResponse> results = new ArrayList<>();
+
+    // 2. Para cada fixture, busca odds das casas BR
+    for (OddsPapiFixture fixture : fixtures) {
+        String oddsUrl = BASE_URL + "/odds"
+            + "?apiKey=" + apiKey
+            + "&fixtureId=" + fixture.getFixtureId()
+            + "&bookmakers=" + BOOKMAKERS_PARAM;
+
+        OddsPapiOddsResponse oddsResp;
+        try {
+            oddsResp = restTemplate.getForObject(oddsUrl, OddsPapiOddsResponse.class);
+        } catch (Exception e) {
+            continue;
+        }
+        if (oddsResp == null || oddsResp.getBookmakerOdds() == null) continue;
+
+        OddsResponse game = convertToOddsResponse(fixture, oddsResp);
+        if (game != null) results.add(game);
+    }
+
+    return results;
+}
 
     private OddsResponse convertToOddsResponse(
             OddsPapiFixture fixture,
