@@ -76,22 +76,24 @@ public class OddsPapiClient {
         List<OddsResponse> results = new ArrayList<>();
 
         for (OddsPapiFixture fixture : fixtures) {
-            String oddsUrl = BASE_URL + "/odds"
-                + "?apiKey=" + apiKey
-                + "&fixtureId=" + fixture.getFixtureId()
-                + "&bookmakers=" + BOOKMAKERS_PARAM;
+    try { Thread.sleep(500); } catch (InterruptedException ignored) {} // 500ms entre requests
 
-            OddsPapiOddsResponse oddsResp;
-            try {
-                oddsResp = restTemplate.getForObject(oddsUrl, OddsPapiOddsResponse.class);
-            } catch (Exception e) {
-                continue;
-            }
-            if (oddsResp == null || oddsResp.getBookmakerOdds() == null) continue;
+    String oddsUrl = BASE_URL + "/odds"
+        + "?apiKey=" + apiKey
+        + "&fixtureId=" + fixture.getFixtureId()
+        + "&bookmakers=" + BOOKMAKERS_PARAM;
 
-            OddsResponse game = convertToOddsResponse(fixture, oddsResp);
-            if (game != null) results.add(game);
-        }
+    OddsPapiOddsResponse oddsResp;
+    try {
+        oddsResp = restTemplate.getForObject(oddsUrl, OddsPapiOddsResponse.class);
+    } catch (Exception e) {
+        continue;
+    }
+    if (oddsResp == null || oddsResp.getBookmakerOdds() == null) continue;
+
+    OddsResponse game = convertToOddsResponse(fixture, oddsResp);
+    if (game != null) results.add(game);
+}
 
         return results;
     }
