@@ -15,7 +15,7 @@ public class OddsScheduler {
     private final OddsService oddsService;
 
     // Atualiza a cada 10 minutos — preserva cota da The Odds API
-   @Scheduled(fixedRate = 1_800_000) // 30 minutos
+  @Scheduled(fixedRate = 21_600_000) // 6 horas = 500 créditos duram o mês
     @CacheEvict(value = "best-odds", allEntries = true)
     public void refreshOdds() {
         log.info("[OddsScheduler] Atualizando odds...");
