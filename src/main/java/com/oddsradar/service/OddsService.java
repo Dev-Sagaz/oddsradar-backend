@@ -1,7 +1,6 @@
 package com.oddsradar.service;
 
 import com.oddsradar.client.OddsApiClient;
-import com.oddsradar.client.OddsPapiClient;
 import com.oddsradar.model.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
@@ -14,7 +13,8 @@ import java.util.*;
 public class OddsService {
 
     private final OddsApiClient oddsApiClient;
-    private final OddsPapiClient oddsPapiClient;
+    // OddsPapiClient desativado temporariamente — free tier não cobre casas BR
+    // private final OddsPapiClient oddsPapiClient;
 
     private static final Set<String> BOOKMAKERS_BR = Set.of(
         "Betano",
@@ -27,7 +27,11 @@ public class OddsService {
         "KTO",
         "Estrela Bet",
         "BetBra",
-        "Superbet"
+        "Superbet",
+        "1xBet",
+        "Betfair",
+        "Betfair_ex_eu",
+        "Matchbook"
     );
 
     private static final Map<String, Double> EXCHANGE_COMMISSION = Map.of(
@@ -42,35 +46,17 @@ public class OddsService {
 
     @Cacheable("best-odds")
     public List<BestOddsResult> getBestOdds(String sport) {
+        List<OddsResponse> games = new ArrayList<>();
 
-        // 1. Busca das duas APIs e combina os jogos
-        List<OddsResponse> gamesFromOddsApi = new ArrayList<>();
-        List<OddsResponse> gamesFromOddsPapi = new ArrayList<>();
-
-        try { gamesFromOddsApi  = oddsApiClient.getOdds(sport);  } catch (Exception ignored) {}
-        try { gamesFromOddsPapi = oddsPapiClient.getOdds(sport); } catch (Exception ignored) {}
-
-        // 2. Indexa jogos da OddsAPI por homeTeam+awayTeam
-        Map<String, OddsResponse> gameMap = new LinkedHashMap<>();
-        for (OddsResponse g : gamesFromOddsApi) {
-            gameMap.put(gameKey(g), g);
-        }
-
-        // 3. Mescla jogos do OddsPapi — se já existe, adiciona bookmakers; senão cria novo
-        for (OddsResponse g : gamesFromOddsPapi) {
-            String key = gameKey(g);
-            if (gameMap.containsKey(key)) {
-                // Adiciona bookmakers do OddsPapi ao jogo existente
-                gameMap.get(key).getBookmakers().addAll(g.getBookmakers());
-            } else {
-                gameMap.put(key, g);
-            }
+        try {
+            games = oddsApiClient.getOdds(sport);
+        } catch (Exception e) {
+            return Collections.emptyList();
         }
 
         List<BestOddsResult> results = new ArrayList<>();
 
-        for (OddsResponse game : gameMap.values()) {
-            // [effectivePrice, rawPrice, commission]
+        for (OddsResponse game : games) {
             Map<String, double[]> best = new HashMap<>();
             Map<String, String> bestBook = new HashMap<>();
 
@@ -106,10 +92,10 @@ public class OddsService {
                 boolean isExchange = EXCHANGE_COMMISSION.containsKey(bmTitle);
                 outcomes.add(new BestOddsResult.BestOutcome(
                     name,
-                    prices[0],   // effectivePrice
+                    prices[0],
                     bmTitle,
-                    prices[1],   // rawPrice
-                    prices[2],   // commission
+                    prices[1],
+                    prices[2],
                     isExchange
                 ));
             });
@@ -137,20 +123,10 @@ public class OddsService {
         return results;
     }
 
-    // Chave única por jogo para mesclar as duas APIs
-    private String gameKey(OddsResponse g) {
-        return (g.getHome_team() + "|" + g.getAway_team()).toLowerCase();
-    }
-
     public List<String> getAvailableBookmakers(String sport) {
         Set<String> titles = new TreeSet<>();
         try {
             for (OddsResponse g : oddsApiClient.getOdds(sport))
-                for (Bookmaker bm : g.getBookmakers())
-                    titles.add(bm.getTitle());
-        } catch (Exception ignored) {}
-        try {
-            for (OddsResponse g : oddsPapiClient.getOdds(sport))
                 for (Bookmaker bm : g.getBookmakers())
                     titles.add(bm.getTitle());
         } catch (Exception ignored) {}
